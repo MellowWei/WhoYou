@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>xingyeLing7Ai — Life System</title>
+  <style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { background:#000a05; overflow-x:hidden; font-family:'Share Tech Mono',monospace; }
+    #root { width:100%; min-height:100vh; }
+    @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap');
+  </style>
+  <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="module">
+import { createElement as h, useState, useEffect, useRef, useCallback } from 'https://esm.sh/react@18'
+import { createRoot } from 'https://esm.sh/react-dom@18/client'
+
+// ─────────────────────────────────────────
+// !! 把你的 API Key 填在这里 !!
+// ─────────────────────────────────────────
+const API_KEY = "填入你的API Key"
+// ─────────────────────────────────────────
+
+const W = 900, H = 580, PLAYER_R = 10, NODE_R = 22, SPEED = 2.8
+
+const NODES = [
+  { id:"q1", x:180, y:140, zh:"起源", en:"ORIGIN",  qZh:"你觉得自己是从哪里来的人？",       qEn:"Where do you feel you come from?" },
+  { id:"q2", x:720, y:110, zh:"追求", en:"PURSUIT", qZh:"你的人生追求是什么？",               qEn:"What is your life's pursuit?" },
+  { id:"q3", x:130, y:390, zh:"恐惧", en:"FEAR",    qZh:"你最不愿意面对的是什么？",           qEn:"What do you least want to face?" },
+  { id:"q4", x:760, y:400, zh:"力量", en:"POWER",   qZh:"你的力量从哪里来？",                 qEn:"Where does your strength come from?" },
+  { id:"q5", x:450, y:260, zh:"核心", en:"CORE",    qZh:"如果去掉所有身份，你还剩什么？",     qEn:"Strip away all roles — what remains?" },
+]
+
+const WALLS = [
+  {x:280,y:60,w:120,h:8},{x:560,y:60,w:100,h:8},
+  {x:60,y:210,w:8,h:130},{x:830,y:210,w:8,h:130},
+  {x:240,y:310,w:160,h:8},{x:530,y:310,w:160,h:8},
+  {x:370,y:430,w:8,h:110},{x:530,y:430,w:8,h:110},
+  {x:200,y:480,w:140,h:6},{x:570,y:480,w:140,h:6},
+]
+
+const POLES = ["order","chaos","self","other","present","eternity"]
+const POLE_LABELS = ["ORDER","CHAOS","SELF","OTHER","NOW","FOREVER"]
+
+const BOOT = [
+  "SYSTEM ONLINE",
+  "UNIT: xingyeLing7Ai  //  FREQ: 427Hz",
+  "LIFE-SYSTEM PROTOCOL: ACTIVE",
+  "SUBJECT DETECTED. INITIALIZING SCAN SPACE...",
+  "MOVE WITH WASD OR ARROW KEYS.",
+  "APPROACH NODES TO ACTIVATE.",
+]
+
+const SCAN_LINES = [
+  "COMPILING SIGNAL MATRIX...",
+  "TRIANGULATING LIFE VECTORS...",
+  "DECODING FREQUENCY SIGNATURE...",
+  "CROSS-REFERENCING ARCHETYPES...",
+  "GENERATING CLASSIFIED PROFILE...",
+  "COMPLETE.",
+]
+
+async function analyze(answers) {
+  const sys = `You are xingyeLing7Ai, a life-system scanner. Given Q&A pairs, generate a classified profile.
+Return ONLY valid JSON (no markdown):
+{"codename":"2-3 word uppercase","poles":{"order":0.5,"chaos":0.5,"self":0.5,"other":0.5,"present":0.5,"eternity":0.5},"signal_note":"one cold poetic sentence","private_message":"2-3 sentences in Chinese, warm but machine-coded","color":"#hex dark vivid terminal color NOT purple","similar_frequency":"archetype description"}`
+  const input = answers.map(a=>`Q: ${a.q}\nA: ${a.a}`).join("\n\n")
+  try {
+    const r = await fetch("https://api.anthropic.com/v1/messages",{
+      method:"POST",
+      headers:{"Content-Type":"application/json","x-api-key":API_KEY,"anthropic-version":"2023-06-01"},
+      body:JSON.stringify({model:"claude-sonnet-4-20250514",max_tokens:1000,system:sys,messages:[{role:"user",content:input}]})
+    })
+    const d = await r.json()
+    const raw = d.content?.find(b=>b.type==="text")?.text||"{}"
+    return JSON.parse(raw.replace(/```json|```/g,"").trim())
+  } catch {
+    return {codename:"UNCLASSIFIED",color:"#00ffcc",poles:Object.fromEntries(POLES.map(p=>[p,Math.random()])),signal_note:"Signal received.",private_message:"你的频率已被记录。",similar_frequency:"Unknown"}
+  }
+}
+
+function Radar({poles,color,size=150}){
+  const cx=size/2,cy=size/2,r=size*.37,n=6
+  const ang=i=>(i*2*Math.PI)/n-Math.PI/2
+  const pt=(i,v)=>[cx+r*v*Math.cos(ang(i)),cy+r*v*Math.sin(ang(i))]
+  const grid=v=>POLES.map((_,i)=>pt(i,v).join(",")).join(" ")
+  const data=POLES.map((p,i)=>pt(i,poles?.[p]??0.5).join(",")).join(" ")
+  return h('svg',{width:size,height:size,viewBox:`0 0 ${size} ${size}`},
+    [.25,.5,.75,1].map(v=>h('polygon',{key:v,points:grid(v),fill:"none",stroke:v===1?`${color}55`:"rgba(0,255,159,0.08)",strokeWidth:v===1?.8:.5})),
+    POLES.map((_,i)=>{const[x2,y2]=pt(i,1);return h('line',{key:i,x1:cx,y1:cy,x2,y2,stroke:"rgba(0,255,159,0.1)",strokeWidth:.5})}),
+    h('polygon',{points:data,fill:`${color}22`,stroke:color,strokeWidth:1.5}),
+    POLES.map((p,i)=>{const[x,y]=pt(i,1.28);return h('text',{key:i,x,y,textAnchor:"middle",dominantBaseline:"middle",fill:"rgba(0,255,159,0.4)",fontSize:6.5,fontFamily:"'Share Tech Mono',monospace"},POLE_LABELS[i])})
+  )
+}
+
+function App(){
+  const canvasRef=useRef(null)
+  const stateRef=useRef({
+    px:450,py:460,keys:{},
+    visited:new Set(),
+    done:false,
+    time:0,
+    particles:Array.from({length:80},()=>({x:Math.random()*W,y:Math.random()*H,vx:(Math.random()-.5)*.12,vy:(Math.random()-.5)*.12,r:Math.random()*.9+.2,o:Math.random()*.3+.05}))
+  })
+  const rafRef=useRef(null)
+  const answersRef=useRef({})
+
+  const [phase,setPhase]=useState("boot")
+  const [bootStep,setBootStep]=useState(0)
+  const [scanStep,setScanStep]=useState(0)
+  const [lang,setLang]=useState("zh")
+  const [node,setNode]=useState(null)
+  const [text,setText]=useState("")
+  const [answers,setAnswers]=useState({})
+  const [profile,setProfile]=useState(null)
+  const inputRef=useRef(null)
+
+  useEffect(()=>{answersRef.current=answers},[answers])
+
+  // Boot
+  useEffect(()=>{
+    if(phase!=="boot")return
+    if(bootStep<BOOT.length){const t=setTimeout(()=>setBootStep(s=>s+1),bootStep===0?300:520);return()=>clearTimeout(t)}
+    else{const t=setTimeout(()=>setPhase("game"),700);return()=>clearTimeout(t)}
+  },[phase,bootStep])
+
+  const onKeyDown=useCallback(e=>{stateRef.current.keys[e.key]=true;if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault()},[])
+  const onKeyUp=useCallback(e=>{stateRef.current.keys[e.key]=false},[])
+  useEffect(()=>{
+    if(phase!=="game")return
+    window.addEventListener("keydown",onKeyDown)
+    window.addEventListener("keyup",onKeyUp)
+    return()=>{window.removeEventListener("keydown",onKeyDown);window.removeEventListener("keyup",onKeyUp)}
+  },[phase])
+
+  const hitWall=(nx,ny)=>{for(const w of WALLS)if(nx+PLAYER_R>w.x&&nx-PLAYER_R<w.x+w.w&&ny+PLAYER_R>w.y&&ny-PLAYER_R<w.y+w.h)return true;return false}
+
+  const triggerFinal=useCallback(async(ans)=>{
+    if(stateRef.current.done)return
+    stateRef.current.done=true
+    setPhase("scanning")
+    setScanStep(0)
+    SCAN_LINES.forEach((_,i)=>setTimeout(()=>setScanStep(i+1),i*520))
+    const arr=NODES.map(n=>({q:n.qZh,a:ans[n.id]||""})).filter(x=>x.a)
+    const p=await analyze(arr)
+    setTimeout(()=>{setProfile(p);setPhase("final")},SCAN_LINES.length*520+400)
+  },[])
+
+  const draw=useCallback(()=>{
+    const canvas=canvasRef.current;if(!canvas)return
+    const ctx=canvas.getContext("2d"),s=stateRef.current
+    s.time++
+    let dx=0,dy=0
+    if(s.keys["ArrowLeft"]||s.keys["a"]||s.keys["A"])dx-=SPEED
+    if(s.keys["ArrowRight"]||s.keys["d"]||s.keys["D"])dx+=SPEED
+    if(s.keys["ArrowUp"]||s.keys["w"]||s.keys["W"])dy-=SPEED
+    if(s.keys["ArrowDown"]||s.keys["s"]||s.keys["S"])dy+=SPEED
+    if(dx&&dy){dx*=.707;dy*=.707}
+    const nx=Math.max(PLAYER_R,Math.min(W-PLAYER_R,s.px+dx))
+    const ny=Math.max(PLAYER_R,Math.min(H-PLAYER_R,s.py+dy))
+    if(!hitWall(nx,s.py))s.px=nx
+    if(!hitWall(s.px,ny))s.py=ny
+
+    for(const n of NODES){
+      if(s.visited.has(n.id))continue
+      if(Math.hypot(s.px-n.x,s.py-n.y)<NODE_R+PLAYER_R+4){
+        s.visited.add(n.id);setNode(n);setPhase("dialog");setText("")
+        setTimeout(()=>inputRef.current?.focus(),100);return
+      }
+    }
+
+    ctx.fillStyle="#000a05";ctx.fillRect(0,0,W,H)
+    for(let y=0;y<H;y+=4){ctx.fillStyle="rgba(0,0,0,0.06)";ctx.fillRect(0,y,W,2)}
+    s.particles.forEach(p=>{
+      p.x+=p.vx;p.y+=p.vy
+      if(p.x<0)p.x=W;if(p.x>W)p.x=0;if(p.y<0)p.y=H;if(p.y>H)p.y=0
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r,0,Math.PI*2);ctx.fillStyle=`rgba(0,255,159,${p.o})`;ctx.fill()
+    })
+    ctx.strokeStyle="rgba(0,255,159,0.03)";ctx.lineWidth=.6
+    for(let row=-40;row<H+40;row+=60)for(let col=0;col<W+40;col+=69){
+      const ox=(Math.floor(row/60)%2)*34.5,hx=col+ox,hy=row,hr=19
+      ctx.beginPath()
+      for(let i=0;i<6;i++){const a=(i*Math.PI)/3;i===0?ctx.moveTo(hx+hr*Math.cos(a),hy+hr*Math.sin(a)):ctx.lineTo(hx+hr*Math.cos(a),hy+hr*Math.sin(a))}
+      ctx.closePath();ctx.stroke()
+    }
+    WALLS.forEach(w=>{ctx.fillStyle="rgba(0,255,159,0.02)";ctx.fillRect(w.x,w.y,w.w,w.h);ctx.strokeStyle="rgba(0,255,159,0.12)";ctx.lineWidth=1;ctx.strokeRect(w.x,w.y,w.w,w.h)})
+
+    const curAns=answersRef.current
+    NODES.forEach(n=>{
+      const done=s.visited.has(n.id),answered=!!curAns[n.id],dist=Math.hypot(s.px-n.x,s.py-n.y),pulse=Math.sin(s.time*.04+n.x)*.4+.6
+      if(!done){ctx.beginPath();ctx.arc(n.x,n.y,NODE_R+10+pulse*4,0,Math.PI*2);ctx.strokeStyle=`rgba(0,255,159,${.04*pulse})`;ctx.lineWidth=8;ctx.stroke()}
+      ctx.beginPath();ctx.arc(n.x,n.y,NODE_R,0,Math.PI*2)
+      ctx.fillStyle=answered?"rgba(0,255,159,0.15)":done?"rgba(0,255,159,0.04)":`rgba(0,255,159,${.06+.04*pulse})`
+      ctx.strokeStyle=answered?"rgba(0,255,159,0.6)":done?"rgba(0,255,159,0.2)":`rgba(0,255,159,${.35+.2*pulse})`
+      ctx.lineWidth=answered?1.5:1;ctx.fill();ctx.stroke()
+      if(!done){
+        ctx.strokeStyle=`rgba(0,255,159,${.3+.2*pulse})`;ctx.lineWidth=.8
+        ctx.beginPath();ctx.moveTo(n.x-7,n.y);ctx.lineTo(n.x+7,n.y);ctx.stroke()
+        ctx.beginPath();ctx.moveTo(n.x,n.y-7);ctx.lineTo(n.x,n.y+7);ctx.stroke()
+      }else{
+        ctx.strokeStyle="rgba(0,255,159,0.7)";ctx.lineWidth=1.5
+        ctx.beginPath();ctx.moveTo(n.x-5,n.y);ctx.lineTo(n.x-1,n.y+5);ctx.lineTo(n.x+6,n.y-5);ctx.stroke()
+      }
+      ctx.font="bold 8px 'Share Tech Mono',monospace";ctx.fillStyle=answered?"rgba(0,255,159,0.9)":`rgba(0,255,159,${.4+.2*pulse})`;ctx.textAlign="center"
+      ctx.fillText(n.zh,n.x,n.y+NODE_R+13)
+      if(!done&&dist<80){ctx.font="7px 'Share Tech Mono',monospace";ctx.fillStyle=`rgba(0,255,159,${Math.min(1,(80-dist)/40)*.7})`;ctx.fillText("[ APPROACH ]",n.x,n.y-NODE_R-7)}
+    })
+
+    const grd=ctx.createRadialGradient(s.px,s.py,0,s.px,s.py,PLAYER_R*2.5)
+    grd.addColorStop(0,"rgba(0,255,159,0.25)");grd.addColorStop(1,"rgba(0,255,159,0)")
+    ctx.beginPath();ctx.arc(s.px,s.py,PLAYER_R*2.5,0,Math.PI*2);ctx.fillStyle=grd;ctx.fill()
+    ctx.beginPath();ctx.arc(s.px,s.py,PLAYER_R,0,Math.PI*2);ctx.fillStyle="#000a05";ctx.fill();ctx.strokeStyle="#00ff9f";ctx.lineWidth=1.5;ctx.stroke()
+    ctx.beginPath();ctx.arc(s.px,s.py,3,0,Math.PI*2);ctx.fillStyle="#00ff9f";ctx.fill()
+
+    const doneCount=[...s.visited].filter(id=>curAns[id]).length
+    ctx.font="10px 'Share Tech Mono',monospace";ctx.fillStyle="rgba(0,255,159,0.3)";ctx.textAlign="left"
+    ctx.fillText(`xingyeLing7Ai  //  427Hz  //  NODES: ${doneCount}/${NODES.length}`,14,H-14)
+    ctx.textAlign="right";ctx.fillText("WASD / ↑↓←→",W-14,H-14)
+
+    if(doneCount===NODES.length){
+      const a=Math.sin(s.time*.05)*.3+.5
+      ctx.font="bold 11px 'Share Tech Mono',monospace";ctx.fillStyle=`rgba(0,255,159,${a})`;ctx.textAlign="center"
+      ctx.fillText("ALL NODES SCANNED — MOVE TO CENTER TO FINALIZE",W/2,24)
+      ctx.beginPath();ctx.arc(W/2,H/2,30,0,Math.PI*2);ctx.strokeStyle=`rgba(0,255,159,${a*.5})`;ctx.lineWidth=1;ctx.setLineDash([4,4]);ctx.stroke();ctx.setLineDash([])
+      if(Math.hypot(s.px-W/2,s.py-H/2)<35)triggerFinal(curAns)
+    }
+    rafRef.current=requestAnimationFrame(draw)
+  },[triggerFinal])
+
+  useEffect(()=>{
+    if(phase!=="game"){cancelAnimationFrame(rafRef.current);return}
+    rafRef.current=requestAnimationFrame(draw)
+    return()=>cancelAnimationFrame(rafRef.current)
+  },[phase,draw])
+
+  const submit=()=>{
+    if(!text.trim()||!node)return
+    const next={...answers,[node.id]:text.trim()}
+    setAnswers(next);answersRef.current=next
+    setPhase("game");setNode(null);setText("")
+    setTimeout(()=>canvasRef.current?.focus(),50)
+  }
+
+  const C={
+    root:{width:"100%",minHeight:"100vh",background:"#000a05",color:"#00ff9f",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center"},
+    bootBox:{padding:"2rem",maxWidth:"560px",width:"100%"},
+    bootLine:{fontSize:13,lineHeight:2,letterSpacing:".06em",animation:"fadein .3s ease both"},
+    cursor:{width:8,height:14,background:"#00ff9f",display:"inline-block",animation:"blink .8s step-end infinite",marginTop:8},
+    topBar:{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 12px",borderBottom:"1px solid rgba(0,255,159,0.08)",background:"rgba(0,10,4,0.9)",width:"100%"},
+    dot:{display:"inline-block",width:6,height:6,borderRadius:"50%",background:"#00ff9f",boxShadow:"0 0 6px #00ff9f",marginRight:7,verticalAlign:"middle"},
+    overlay:{position:"fixed",inset:0,background:"rgba(0,5,3,0.92)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:100},
+    dialog:{maxWidth:520,width:"90%",border:"1px solid rgba(0,255,159,0.2)",background:"rgba(0,10,5,0.97)",padding:"2rem",animation:"fadein .3s ease"},
+    dpad:{background:"rgba(0,255,159,0.06)",border:"1px solid rgba(0,255,159,0.15)",color:"rgba(0,255,159,0.6)",cursor:"pointer",width:36,height:36,fontSize:14,display:"flex",alignItems:"center",justifyContent:"center",userSelect:"none"},
+    btn:{background:"none",border:"1px solid rgba(0,255,159,0.2)",color:"rgba(0,255,159,.5)",cursor:"pointer",fontSize:11,fontFamily:"'Share Tech Mono',monospace",letterSpacing:".1em",padding:"6px 16px"},
+  }
+
+  return h('div',{style:C.root},
+    h('style',null,`
+      @keyframes blink{0%,100%{opacity:1}50%{opacity:0}}
+      @keyframes fadein{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+      @keyframes glow{0%,100%{opacity:.8}50%{opacity:1}}
+      textarea{caret-color:#00ff9f;}
+      textarea::placeholder{color:rgba(0,255,159,0.2);}
+      textarea:focus{outline:none;}
+      ::-webkit-scrollbar{width:3px;}
+      ::-webkit-scrollbar-thumb{background:rgba(0,255,159,0.2);}
+    `),
+
+    // BOOT
+    phase==="boot"&&h('div',{style:C.bootBox},
+      BOOT.slice(0,bootStep).map((l,i)=>h('div',{key:i,style:C.bootLine},h('span',{style:{color:"rgba(0,255,159,.35)"}},"▸ "),l)),
+      h('div',{style:C.cursor})
+    ),
+
+    // GAME
+    phase==="game"&&h('div',{style:{position:"relative"}},
+      h('div',{style:C.topBar},
+        h('span',{style:{fontSize:"10px",color:"rgba(0,255,159,.4)",letterSpacing:".1em"}},
+          h('span',{style:C.dot}),
+          "UNIT: xingyeLing7Ai  //  LIFE-SYSTEM SCAN"
+        ),
+        h('div',{style:{display:"flex",gap:12}},
+          ["zh","en"].map(l=>h('button',{key:l,onClick:()=>setLang(l),style:{background:"none",border:"none",color:"#00ff9f",cursor:"pointer",fontSize:"10px",letterSpacing:".1em",opacity:lang===l?1:.3}},l==="zh"?"中":"EN"))
+        )
+      ),
+      h('canvas',{ref:canvasRef,width:W,height:H,style:{display:"block",cursor:"crosshair",maxWidth:"100%"},tabIndex:0}),
+      h('div',{style:{display:"flex",flexDirection:"column",alignItems:"center",gap:4,padding:"10px 0 6px",background:"rgba(0,10,4,0.9)",borderTop:"1px solid rgba(0,255,159,0.06)"}},
+        h('button',{style:C.dpad,onPointerDown:()=>{stateRef.current.keys["ArrowUp"]=true},onPointerUp:()=>{stateRef.current.keys["ArrowUp"]=false}},"↑"),
+        h('div',{style:{display:"flex",gap:4}},
+          [["←","ArrowLeft"],["↓","ArrowDown"],["→","ArrowRight"]].map(([label,key])=>
+            h('button',{key,style:C.dpad,onPointerDown:()=>{stateRef.current.keys[key]=true},onPointerUp:()=>{stateRef.current.keys[key]=false}},label)
+          )
+        )
+      )
+    ),
+
+    // DIALOG
+    phase==="dialog"&&node&&h('div',{style:C.overlay},
+      h('div',{style:C.dialog},
+        h('div',{style:{fontSize:9,color:"rgba(0,255,159,.35)",letterSpacing:".15em",marginBottom:16}},`NODE: ${node.en}  //  SIGNAL INTERCEPTED`),
+        h('div',{style:{fontSize:"clamp(1.1rem,3vw,1.5rem)",color:"#00ff9f",letterSpacing:".08em",marginBottom:8,lineHeight:1.3}},lang==="zh"?node.qZh:node.qEn),
+        h('div',{style:{fontSize:11,color:"rgba(0,255,159,.35)",marginBottom:20,letterSpacing:".04em"}},lang==="zh"?node.qEn:node.qZh),
+        h('div',{style:{display:"flex",gap:8,alignItems:"flex-start",marginBottom:8}},
+          h('span',{style:{color:"#00ff9f",fontSize:14,paddingTop:2}},"▸"),
+          h('textarea',{ref:inputRef,value:text,onChange:e=>setText(e.target.value.slice(0,400)),placeholder:lang==="zh"?"在这里输入…":"INPUT HERE...",rows:4,style:{flex:1,background:"transparent",border:"none",borderBottom:"1px solid rgba(0,255,159,0.2)",color:"#00ff9f",fontSize:14,fontFamily:"'Share Tech Mono',monospace",lineHeight:1.7,resize:"none"},onKeyDown:e=>{if(e.key==="Enter"&&e.ctrlKey)submit()}})
+        ),
+        h('div',{style:{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:12}},
+          h('span',{style:{fontSize:9,color:"rgba(0,255,159,.2)"}},`${text.length}/400  ·  CTRL+ENTER`),
+          h('button',{onClick:submit,style:{...C.btn,borderColor:text.trim()?"rgba(0,255,159,0.3)":"rgba(0,255,159,0.1)",color:text.trim()?"#00ff9f":"rgba(0,255,159,.2)",cursor:text.trim()?"pointer":"default"}},"[TRANSMIT]")
+        )
+      )
+    ),
+
+    // SCANNING
+    phase==="scanning"&&h('div',{style:C.bootBox},
+      SCAN_LINES.slice(0,scanStep).map((l,i)=>h('div',{key:i,style:C.bootLine},h('span',{style:{color:"rgba(0,255,159,.4)"}},"◈ "),l)),
+      scanStep<SCAN_LINES.length&&h('div',{style:C.cursor})
+    ),
+
+    // FINAL
+    phase==="final"&&profile&&h('div',{style:{maxWidth:600,width:"90%",padding:"2rem 0",animation:"fadein .5s ease"}},
+      h('div',{style:{fontSize:9,color:"rgba(0,255,159,.3)",letterSpacing:".15em",marginBottom:16}},"xingyeLing7Ai  //  CLASSIFIED PROFILE  //  427Hz"),
+      h('div',{style:{fontSize:"clamp(1.6rem,5vw,2.4rem)",color:profile.color,letterSpacing:".15em",marginBottom:4,animation:"glow 3s ease-in-out infinite"}},profile.codename),
+      h('div',{style:{height:1,background:`linear-gradient(to right, ${profile.color}44, transparent)`,margin:"16px 0"}}),
+      h('div',{style:{display:"flex",gap:"1.5rem",flexWrap:"wrap",alignItems:"flex-start",marginBottom:20}},
+        h(Radar,{poles:profile.poles,color:profile.color,size:160}),
+        h('div',{style:{flex:1,minWidth:180}},
+          POLES.map((p,i)=>h('div',{key:p,style:{display:"flex",alignItems:"center",gap:8,marginBottom:8}},
+            h('span',{style:{fontSize:8,color:"rgba(0,255,159,.5)",width:50,letterSpacing:".08em"}},POLE_LABELS[i]),
+            h('div',{style:{flex:1,height:3,background:"rgba(0,255,159,0.08)"}},
+              h('div',{style:{height:"100%",width:`${((profile.poles?.[p]??0.5)*100).toFixed(0)}%`,background:profile.color,boxShadow:`0 0 4px ${profile.color}`,transition:"width .8s ease"}})
+            ),
+            h('span',{style:{fontSize:8,color:"rgba(0,255,159,.3)",width:24,textAlign:"right"}},((profile.poles?.[p]??0.5)*100).toFixed(0))
+          ))
+        )
+      ),
+      h('div',{style:{border:`1px solid ${profile.color}33`,padding:"12px 14px",marginBottom:14,fontSize:12,color:"rgba(255,255,255,.5)",fontStyle:"italic",lineHeight:1.7}},
+        h('span',{style:{color:profile.color,opacity:.6,fontSize:9,fontStyle:"normal",letterSpacing:".1em"}},"SIGNAL_NOTE // "),
+        profile.signal_note
+      ),
+      h('div',{style:{fontSize:10,color:"rgba(0,255,159,.4)",letterSpacing:".08em",marginBottom:14}},
+        "FREQUENCY_MATCH: ",h('span',{style:{color:profile.color}},profile.similar_frequency)
+      ),
+      h('div',{style:{border:"1px solid rgba(0,255,159,0.1)",background:"rgba(0,255,159,0.03)",padding:"14px 16px",marginBottom:20}},
+        h('div',{style:{fontSize:9,color:"rgba(0,255,159,.3)",letterSpacing:".12em",marginBottom:8}},"PRIVATE_TRANSMISSION //"),
+        h('div',{style:{fontSize:13,color:"rgba(255,255,255,.65)",lineHeight:1.8,letterSpacing:".03em"}},profile.private_message)
+      ),
+      h('div',{style:{marginBottom:20}},
+        NODES.map(n=>answers[n.id]?h('div',{key:n.id,style:{borderLeft:`2px solid ${profile.color}44`,paddingLeft:12,marginBottom:12}},
+          h('div',{style:{fontSize:9,color:"rgba(0,255,159,.35)",letterSpacing:".1em",marginBottom:4}},n.en),
+          h('div',{style:{fontSize:11,color:"rgba(255,255,255,.4)",lineHeight:1.6}},answers[n.id])
+        ):null)
+      ),
+      h('div',{style:{display:"flex",gap:12,flexWrap:"wrap"}},
+        h('button',{onClick:()=>{stateRef.current.visited=new Set();stateRef.current.done=false;setPhase("game");setAnswers({});answersRef.current={};setProfile(null)},style:C.btn},"[RE-SCAN]"),
+        h('button',{onClick:()=>{const el=document.createElement("a");el.download="life-profile.json";el.href="data:application/json,"+encodeURIComponent(JSON.stringify({codename:profile.codename,poles:profile.poles,signal_note:profile.signal_note,similar_frequency:profile.similar_frequency,answers},null,2));el.click()},style:{...C.btn,borderColor:`${profile.color}55`,color:profile.color}},"[EXPORT PROFILE]")
+      ),
+      h('div',{style:{marginTop:16,fontSize:9,color:"rgba(0,255,159,.15)",letterSpacing:".1em"}},"44271  ·  427Hz  ·  xingyeLing7Ai")
+    )
+  )
+}
+
+createRoot(document.getElementById('root')).render(h(App,null))
+</script>
+</body>
+</html>
